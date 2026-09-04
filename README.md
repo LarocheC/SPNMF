@@ -129,6 +129,24 @@ Two things the table shows, both of which match the paper:
 - **IS is fragile here.** It is the most sensitive to initialisation and the
   scale of `V`; try `power=2.0` (a power spectrogram) if you want to use it.
 
+### It is not a speech denoiser
+
+Worth stating plainly, because the name invites the assumption. SPNMF separates
+by *signal character*, not by *source identity*, and for speech those axes do
+not line up — speech is both tonal and transient, and noise is too. Routing
+measured on a speech-plus-noise mixture with known components:
+
+| content | → harmonic out | → percussive out | |
+|---|---|---|---|
+| voiced speech | 99.8% | 0.2% | correct |
+| fricatives (speech) | 0.0% | 100.0% | **misrouted** |
+| plosives (speech) | 22.2% | 77.8% | **misrouted** |
+| tonal noise (fan, whine) | 99.7% | 0.3% | **misrouted** |
+| impulsive noise (keys) | 17.5% | 82.5% | correct |
+
+Used as a denoiser it would strip the consonants and keep the hum. Use a
+speech-enhancement model for speech enhancement.
+
 ### The unsupervised swap
 
 Run unsupervised, SPNMF finds a good two-part decomposition — and then puts the
@@ -160,9 +178,11 @@ and the whole thing is a few hundred lines of NumPy.
 
 - **A baseline** to put next to a neural separator, or to bootstrap stems for
   training one.
-- **A transient/steady front-end** for onset detection, beat tracking, chord
-  recognition, or a speech-enhancement pipeline that wants transients handled
-  separately.
+- **A transient/steady front-end** for onset detection, beat tracking or chord
+  recognition — music tasks, where the tonal/transient axis is the one you want.
+- **Stratifying a noise corpus**: splitting untranscribed real-world noise
+  recordings into tonal (fans, HVAC, whine) and impulsive (keys, cutlery,
+  door slams) components, with no ground truth needed.
 - **The semi-supervised case it was designed for**: you have isolated
   percussion but no paired mixtures, so a supervised model has nothing to learn
   from — but a dictionary is one NMF away.
