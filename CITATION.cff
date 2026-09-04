@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+title: "SPNMF: Structured Projective NMF for harmonic/percussive source separation"
+message: "If you use this software, please cite the EUSIPCO 2015 paper below."
+type: software
+authors:
+  - family-names: Laroche
+    given-names: Clément
+repository-code: "https://github.com/LarocheC/SPNMF"
+abstract: >-
+  Python implementation of Structured Projective Non-negative Matrix
+  Factorization, which separates an audio spectrogram into a near-orthogonal
+  projective part modelling the tonal source and an ordinary NMF part modelling
+  percussive transients, under the Euclidean, Kullback-Leibler or Itakura-Saito
+  divergence.
+keywords:
+  - audio source separation
+  - harmonic percussive separation
+  - nonnegative matrix factorization
+  - projective NMF
+references:
+  - type: conference-paper
+    title: "A structured nonnegative matrix factorization for source separation"
+    authors:
+      - family-names: Laroche
+        given-names: Clément
+      - family-names: Kowalski
+        given-names: Matthieu
+      - family-names: Papadopoulos
+        given-names: Hélène
+      - family-names: Richard
+        given-names: Gaël
+    collection-title: "Proceedings of the European Signal Processing Conference (EUSIPCO)"
+    year: 2015
