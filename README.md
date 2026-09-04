@@ -207,26 +207,56 @@ all the energy of any input, white noise included, so its ratio saturates near
 separates tonal (0.89–1.00) from broadband (0.00–0.51); SPNMF's does not
 separate them at all. `method='spnmf'` exists so that is reproducible.
 
-### Seeing what a pooled quality score hides
+### Splitting a quality score by content type
 
 `python examples/quantisation_diagnostics.py`
 
 `per_part_snr()` splits the error of a processed signal into damage to steady
 content and damage to transients, using a decomposition of the **reference** so
-the measurement axis does not move with the estimate's quality. The demo runs a
-supervised-NMF denoiser — fixed dictionaries, a few iterations per frame, a
-genuinely embeddable design — and degrades it two ways:
+the measurement axis does not move with the estimate's quality.
+
+On a supervised-NMF denoiser — fixed dictionaries, a few iterations per frame —
+the two parts come apart sharply:
 
 | | pooled SNR loss | transient SNR loss |
 |---|---|---|
-| dictionaries → int3 | −0.61 dB | **−1.65 dB** |
-| dictionaries → int2 | −1.20 dB | **−3.34 dB** |
-| 40 → 1 iteration | −0.44 dB | **−3.01 dB** |
+| dictionaries → int3 | −0.61 dB | −1.65 dB |
+| dictionaries → int2 | −1.20 dB | −3.34 dB |
+| 40 → 1 iteration | −0.44 dB | −3.01 dB |
 
-Transients give way 3–7× faster than the pooled number admits, because tonal
-content carries 75% of the energy and the pooled score mostly measures that.
-Transients are also the consonants. A single PESQ/DNSMOS-style figure saying an
-aggressive setting costs "0.44 dB" can be hiding 3 dB of consonant damage.
+**That result does not generalise, and it is worth saying so plainly.** Tested
+against three real deployed neural enhancers — the `gru`, `conv` and
+`conv-hardened` LiSenNet variants, their published fp32/int8 ONNX pairs, on 206
+clips of the VoiceBank-DEMAND test split — int8 quantisation shows **no
+significant difference** between what it costs tonal content and what it costs
+transients:
+
+| variant | ΔPESQ (int8−fp32) | transient − tonal damage |
+|---|---|---|
+| `conv-hardened` | −0.018 | −0.006 ± 0.178 dB (n.s.) |
+| `gru` | −0.042 | +0.017 ± 0.184 dB (n.s.) |
+| `conv` | −0.097 | −0.099 ± 0.237 dB (n.s.) |
+
+(±95% CI on the paired per-clip difference. The ΔPESQ values reproduce the
+published −0.015 / −0.076 / −0.115 closely enough to confirm the pipeline.)
+
+Push the quantisation harder and a significant gap does open — in the
+**opposite** direction. Quantising `conv-hardened`'s weights to 4 bits costs
+tonal content 1.98 ± 1.06 dB *more* than transients. For a mask-based enhancer
+that makes sense in hindsight: tonal content starts with the higher SNR and
+needs a precise mask to keep it, while transients were already the weaker part
+and have less left to lose. The NMF result came from a different mechanism —
+coarse dictionary atoms smearing sparse transient templates.
+
+So `per_part_snr` is a diagnostic, not a law. Which way the split falls depends
+on the architecture and on what is being quantised; run it, do not assume it.
+
+One thing that did hold up across every real model tested: **the pooled metrics
+disagree with each other.** At int8, `conv-hardened` loses 0.018 PESQ (68% of
+clips worse) while its pooled SNR *improves* by 0.29 dB, and `conv` loses 0.097
+PESQ (93% of clips worse) at +0.04 dB SNR. Picking the pooled metric changes the
+sign of the answer, which is a larger effect than any content split measured
+here.
 
 ## API
 
