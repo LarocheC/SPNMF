@@ -149,6 +149,16 @@ On real music (MusicDelta stems, dictionary trained on held-out drums) dropping
 the projection gains **6 dB harmonic and 8 dB percussive**. The semi-supervised
 result the method is known for belongs to the dictionary, not to `W_h W_h^T V`.
 
+There is a one-line structural reason. Since `W_h ≥ 0`, the matrix
+`C = W_h W_hᵀ` is entrywise non-negative, and `W_h W_hᵀ V = C V` means **every
+row of the projective part is a non-negative combination of the rows of `V`
+itself** — of the data's own per-bin time courses. The term re-mixes the
+spectrogram rather than modelling it. The rank bounds how many independent
+profiles it may use; nothing bounds what they contain, and nothing gives it any
+preference for tonal rows over percussive ones. So its share is decided by its
+partner's inadequacy rather than by signal content, which is a single fact
+underlying all three symptoms below.
+
 The mechanism is measurable. The projective part is a **residual sponge**: the
 share of energy it takes is set by whatever its partner cannot explain, never by
 what the signal contains. Raw share of `W_h W_hᵀ V` in the reconstruction:
