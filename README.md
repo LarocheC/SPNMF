@@ -180,14 +180,53 @@ and the whole thing is a few hundred lines of NumPy.
   training one.
 - **A transient/steady front-end** for onset detection, beat tracking or chord
   recognition — music tasks, where the tonal/transient axis is the one you want.
-- **Stratifying a noise corpus**: splitting untranscribed real-world noise
-  recordings into tonal (fans, HVAC, whine) and impulsive (keys, cutlery,
-  door slams) components, with no ground truth needed.
 - **The semi-supervised case it was designed for**: you have isolated
   percussion but no paired mixtures, so a supervised model has nothing to learn
   from — but a dictionary is one NMF away.
 - **A readable reference implementation** of projective NMF and β-divergence
   multiplicative updates.
+
+Two uses beyond separation have working demos, both in `examples/`.
+
+### Sorting an unlabelled noise corpus
+
+`python examples/stratify_noise_corpus.py`
+
+Noise banks arrive as a pile of recordings with no labels. `characterise()`
+places each on two independent axes — tonal↔broadband and steady↔bursty — so
+you can control the mix of a training set and report enhancement scores by
+noise type instead of pooled. On a 13-clip synthetic bank with known labels it
+sorts **13/13** into the right bucket, and on the real stems from the original
+repo the drum track sorts impulsive and the pitched ones tonal.
+
+Both axes are needed: hiss and keyboard clicks are indistinguishable on the
+tonal axis alone. **The tonal axis uses `median_hpss`, not SPNMF** — SPNMF's
+projective part is a rank-`r` self-projection greedy enough to absorb nearly
+all the energy of any input, white noise included, so its ratio saturates near
+1.0 and carries no information. Measured over that bank, the median split
+separates tonal (0.89–1.00) from broadband (0.00–0.51); SPNMF's does not
+separate them at all. `method='spnmf'` exists so that is reproducible.
+
+### Seeing what a pooled quality score hides
+
+`python examples/quantisation_diagnostics.py`
+
+`per_part_snr()` splits the error of a processed signal into damage to steady
+content and damage to transients, using a decomposition of the **reference** so
+the measurement axis does not move with the estimate's quality. The demo runs a
+supervised-NMF denoiser — fixed dictionaries, a few iterations per frame, a
+genuinely embeddable design — and degrades it two ways:
+
+| | pooled SNR loss | transient SNR loss |
+|---|---|---|
+| dictionaries → int3 | −0.61 dB | **−1.65 dB** |
+| dictionaries → int2 | −1.20 dB | **−3.34 dB** |
+| 40 → 1 iteration | −0.44 dB | **−3.01 dB** |
+
+Transients give way 3–7× faster than the pooled number admits, because tonal
+content carries 75% of the energy and the pooled score mostly measures that.
+Transients are also the consonants. A single PESQ/DNSMOS-style figure saying an
+aggressive setting costs "0.44 dB" can be hiding 3 dB of consonant damage.
 
 ## API
 
@@ -199,6 +238,9 @@ and the whole thing is a few hundred lines of NumPy.
 | `learn_dictionary(signals, ...)` | train `W_p` by NMF over percussive audio |
 | `stft_dictionary(signals, ...)` | build `W_p` from raw STFT frames instead |
 | `median_hpss(x, sr, ...)` | median-filter HPSS baseline (Fitzgerald, 2010) |
+| `characterise(x, sr)` | place a recording on the tonal/impulsive map |
+| `tonal_fraction`, `temporal_flatness` | the two axes separately |
+| `per_part_snr(ref, est, sr)` | error split into tonal vs transient damage |
 | `bss_eval_sources(refs, ests)` | SDR/SIR/SAR with permutation search |
 | `si_sdr`, `spectral_flatness` | scale-invariant SDR; tonal-vs-noisy descriptor |
 | `stft`, `istft`, `wiener_mask` | exact-reconstruction STFT layer |
@@ -218,12 +260,16 @@ src/spnmf/
   separation.py   end-to-end separation, part assignment
   dictionary.py   percussive dictionary construction
   baselines.py    median-filter HPSS
+  diagnostics.py  corpus characterisation, per-part error analysis
   metrics.py      BSS_EVAL, SI-SDR, spectral flatness
   signals.py      synthetic harmonic/percussive signals
   io.py           audio I/O (soundfile, else stdlib wave)
   demo.py, cli.py
-tests/            88 tests, including numerical-gradient checks
+tests/            102 tests, including numerical-gradient checks
 examples/
+  stratify_noise_corpus.py     sort an unlabelled noise bank
+  quantisation_diagnostics.py  per-part damage under quantisation
+  separate_file.py, reproduce_paper_figure.py
 ```
 
 ```bash

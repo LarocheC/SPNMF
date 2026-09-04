@@ -18,6 +18,14 @@ True
 
 from .baselines import median_hpss
 from .core import NMFResult, SPNMFResult, nmf, spnmf
+from .diagnostics import (
+    Character,
+    PartSNR,
+    characterise,
+    per_part_snr,
+    temporal_flatness,
+    tonal_fraction,
+)
 from .dictionary import concatenate_dictionaries, learn_dictionary, stft_dictionary
 from .divergence import DIVERGENCES, beta_divergence
 from .metrics import bss_eval_sources, si_sdr
@@ -28,6 +36,12 @@ from .stft import istft, stft, wiener_mask
 __version__ = "0.2.0"
 
 __all__ = [
+    "tonal_fraction",
+    "temporal_flatness",
+    "per_part_snr",
+    "characterise",
+    "PartSNR",
+    "Character",
     "DIVERGENCES",
     "NMFResult",
     "SPNMFResult",
