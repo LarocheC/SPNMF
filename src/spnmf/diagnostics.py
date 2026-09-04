@@ -60,13 +60,14 @@ def tonal_fraction(
 
     ``method='median'`` (the default) uses :func:`spnmf.baselines.median_hpss`.
     ``method='spnmf'`` uses this package's own factorisation and **is not
-    recommended for this measurement**: the projective part is a rank-``r``
-    self-projection, so it absorbs nearly all the energy of any input,
-    including white noise, and the ratio saturates near 1.0 regardless of
-    content.  Measured over a labelled noise bank, the median split separates
-    tonal from broadband by a clear margin (0.89-1.00 against 0.00-0.51) while
-    the SPNMF ratio has no discriminative power at all.  The option exists so
-    that is reproducible, not because it works.
+    recommended for this measurement**.  SPNMF's projective part is a residual
+    sponge: the energy it takes is decided by whatever its partner cannot
+    explain rather than by signal content, so the resulting split carries almost
+    no information about the input and the ratio saturates near 1.0 either way.
+    Measured over a labelled noise bank, the median split separates tonal from
+    broadband by a clear margin (0.89-1.00 against 0.00-0.51) while the SPNMF
+    ratio has no discriminative power at all.  The option exists so that is
+    reproducible, not because it works.
     """
     mono = _mono(x)
     stft_kwargs = dict(n_fft=n_fft, hop_length=hop_length)

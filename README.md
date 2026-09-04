@@ -149,13 +149,34 @@ On real music (MusicDelta stems, dictionary trained on held-out drums) dropping
 the projection gains **6 dB harmonic and 8 dB percussive**. The semi-supervised
 result the method is known for belongs to the dictionary, not to `W_h W_h^T V`.
 
-The mechanism is visible directly: a rank-`r` non-negative self-projection is
-greedy and content-blind. It absorbs ~99% of the energy of white noise just as
-readily as of a pure tone, and 97% of clean speech against a median split's 75%.
-The paper motivates it with PNMF's near-orthogonal bases, but measured on a real
-spectrogram at rank 24, `‖W_hᵀW_h − I‖_F/√r = 0.953` with 93% of the Gram matrix
-mass off-diagonal — the basis is not near-orthogonal, so the property the
-structure was chosen for does not hold.
+The mechanism is measurable. The projective part is a **residual sponge**: the
+share of energy it takes is set by whatever its partner cannot explain, never by
+what the signal contains. Raw share of `W_h W_hᵀ V` in the reconstruction:
+
+| input | free NMF partner | fixed drum dictionary |
+|---|---|---|
+| pure tone | 0.000 | 1.000 |
+| harmonic line | 0.000 | 1.000 |
+| white noise | 0.070 | 0.687 |
+| drums | 0.071 | 0.117 |
+
+Against a free basis it collapses to nothing; against a fixed dictionary it
+takes the entire complement. It never discriminates on content — the dictionary
+does, and the right-hand column is just its complement. That is exactly what the
+ablation measures from the other end.
+
+Two attempts to rescue it both fail:
+
+- **Rank is not the problem.** Sweeping `n_harmonic` over 1, 2, 4, 8, 16, 32
+  leaves the shares unchanged to three decimals.
+- **Enforcing the missing orthogonality does not help.** The paper motivates the
+  projection with PNMF's near-orthogonal bases, but measured at rank 24 on a
+  real spectrogram `‖W_hᵀW_h − I‖_F/√r = 0.953`, with 93% of the Gram mass
+  off-diagonal — the property does not hold. Adding an explicit
+  `λ‖W_hᵀW_h − I‖²_F` penalty and sweeping λ from 0 to 100 moves the Gram error
+  only 0.703 → 0.687 and leaves separation flat at 5.11 / −4.55 dB. The
+  constraint the structure was chosen for cannot be imposed after the fact, and
+  imposing it would not have helped.
 
 So use `semi_supervised_nmf` for real work. `spnmf` is kept because it is the
 published method and now a correct, tested implementation of it — which is what
