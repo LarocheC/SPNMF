@@ -23,7 +23,8 @@ import numpy as np
 
 from .divergence import EPS, as_beta, beta_divergence, gradient_split
 
-__all__ = ["SPNMFResult", "NMFResult", "spnmf", "nmf"]
+__all__ = ["SPNMFResult", "NMFResult", "SemiSupervisedResult",
+           "spnmf", "nmf", "semi_supervised_nmf"]
 
 
 # --------------------------------------------------------------------------
@@ -371,4 +372,160 @@ def nmf(
 
     return NMFResult(
         W=W, H=H, cost=cost[: it + 1], beta=beta, n_iter=it + 1, converged=converged
+    )
+
+
+# --------------------------------------------------------------------------
+# semi-supervised NMF: a fixed dictionary plus a free basis
+#
+# This is the model to beat. Ablated against SPNMF with an identical fixed
+# dictionary and iteration budget it wins on both synthetic and real audio --
+# on real music by ~6 dB harmonic and ~8 dB percussive -- which says the
+# semi-supervised win in the SPNMF paper belongs to the dictionary rather than
+# to the projective structure. See examples/ablate_projective.py.
+# --------------------------------------------------------------------------
+
+
+@dataclass
+class SemiSupervisedResult:
+    """Factors and diagnostics returned by :func:`semi_supervised_nmf`."""
+
+    W_free: np.ndarray
+    """Learned basis, ``F x n_free``."""
+
+    H_free: np.ndarray
+    """Activations of the learned basis."""
+
+    W_fixed: np.ndarray
+    """The dictionary that was held constant."""
+
+    H_fixed: np.ndarray
+    """Activations of the fixed dictionary."""
+
+    cost: np.ndarray
+    beta: float
+    n_iter: int
+    converged: bool = False
+
+    @property
+    def free(self):
+        """Spectrogram explained by the learned basis."""
+        return self.W_free @ self.H_free
+
+    @property
+    def fixed(self):
+        """Spectrogram explained by the fixed dictionary."""
+        return self.W_fixed @ self.H_fixed
+
+    @property
+    def reconstruction(self):
+        return self.free + self.fixed
+
+
+def semi_supervised_nmf(
+    V,
+    W_fixed,
+    n_free=20,
+    divergence="kl",
+    n_iter=200,
+    tol=1e-5,
+    random_state=None,
+    verbose=False,
+):
+    """Factorise ``V`` as ``W_free @ H_free + W_fixed @ H_fixed``.
+
+    ``W_fixed`` is a dictionary for a source you have in isolation (drums, a
+    specific noise type); ``W_free`` is learned from the mixture to soak up
+    everything else.  Only ``W_fixed`` is held constant -- the free basis and
+    both activation matrices are estimated.
+
+    This is the semi-supervised setting SPNMF was built for, without the
+    projective term.  It is the baseline any structured variant has to beat.
+
+    Parameters
+    ----------
+    V : array, shape (F, T)
+        Non-negative input.
+    W_fixed : array, shape (F, k)
+        The dictionary to hold constant -- see
+        :func:`spnmf.dictionary.learn_dictionary`.
+    n_free : int
+        Size of the free basis.
+    divergence, n_iter, tol, random_state, verbose
+        As for :func:`spnmf`.
+
+    Returns
+    -------
+    SemiSupervisedResult
+    """
+    V = np.asarray(V, dtype=np.float64)
+    if V.ndim != 2:
+        raise ValueError(f"V must be 2-D, got shape {V.shape}")
+    if np.any(V < 0):
+        raise ValueError("V must be non-negative")
+    if n_free < 1:
+        raise ValueError("n_free must be >= 1")
+
+    W_fixed = np.asarray(W_fixed, dtype=np.float64)
+    if W_fixed.ndim != 2 or W_fixed.shape[0] != V.shape[0]:
+        raise ValueError(
+            f"W_fixed must be (F, k) with F={V.shape[0]}, got {W_fixed.shape}"
+        )
+    if np.any(W_fixed < 0):
+        raise ValueError("W_fixed must be non-negative")
+
+    beta = as_beta(divergence)
+    rng = np.random.default_rng(random_state)
+    F, T = V.shape
+    k = W_fixed.shape[1]
+    target = max(float(np.mean(V)), EPS)
+
+    W_free = rng.random((F, n_free)) + 0.1
+    W_free /= np.sqrt(np.sum(W_free**2, axis=0)) + EPS
+    H = rng.random((n_free + k, T)) + 0.1
+    W = np.concatenate([W_free, W_fixed], axis=1)
+    H *= _rescale_to(W, H, target)
+
+    cost = np.empty(n_iter)
+    converged = False
+    previous = np.inf
+    it = 0
+
+    for it in range(n_iter):
+        # activations for both blocks
+        V_hat = W @ H
+        minus, plus = gradient_split(V, V_hat, beta)
+        H = H * ((W.T @ minus) / (_left_product(W.T, plus, (n_free + k, T)) + EPS))
+
+        # basis: update everything, then restore the fixed block
+        V_hat = W @ H
+        minus, plus = gradient_split(V, V_hat, beta)
+        Ht = H.T
+        updated = W * (
+            (minus @ Ht) / (_right_product(plus, Ht, (F, n_free + k)) + EPS)
+        )
+        W_free, H_free = _normalise_columns(updated[:, :n_free], H[:n_free])
+        W = np.concatenate([W_free, W_fixed], axis=1)
+        H = np.concatenate([H_free, H[n_free:]], axis=0)
+
+        cost[it] = beta_divergence(V, W @ H, beta)
+        if verbose and (it + 1) % 50 == 0:
+            print(f"  iter {it + 1:4d}  cost {cost[it]:.6g}")
+
+        if tol is not None and np.isfinite(previous):
+            improvement = (previous - cost[it]) / max(abs(previous), EPS)
+            if 0.0 <= improvement < tol:
+                converged = True
+                break
+        previous = cost[it]
+
+    return SemiSupervisedResult(
+        W_free=W[:, :n_free],
+        H_free=H[:n_free],
+        W_fixed=W_fixed,
+        H_fixed=H[n_free:],
+        cost=cost[: it + 1],
+        beta=beta,
+        n_iter=it + 1,
+        converged=converged,
     )

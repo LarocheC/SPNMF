@@ -170,3 +170,72 @@ def test_non_2d_input_is_rejected():
 def test_mismatched_dictionary_is_rejected(structured_spectrogram):
     with pytest.raises(ValueError, match="frequency bins"):
         spnmf(structured_spectrogram, W_p=np.ones((5, 3)))
+
+
+# --- semi-supervised NMF ---------------------------------------------------
+
+
+@pytest.mark.parametrize("name,beta", BETAS)
+def test_semi_supervised_cost_decreases(name, beta, structured_spectrogram):
+    from spnmf.core import semi_supervised_nmf
+
+    rng = np.random.default_rng(0)
+    W_fixed = rng.random((structured_spectrogram.shape[0], 5)) + 0.1
+    result = semi_supervised_nmf(
+        structured_spectrogram, W_fixed, n_free=4, divergence=name,
+        n_iter=100, tol=None, random_state=1,
+    )
+    assert result.beta == beta
+    assert np.all(np.diff(result.cost) <= 1e-9 * abs(result.cost[0]))
+    assert result.cost[-1] < 0.5 * result.cost[0]
+
+
+def test_semi_supervised_never_touches_the_dictionary(structured_spectrogram):
+    from spnmf.core import semi_supervised_nmf
+
+    rng = np.random.default_rng(1)
+    W_fixed = rng.random((structured_spectrogram.shape[0], 6)) + 0.1
+    original = W_fixed.copy()
+    result = semi_supervised_nmf(
+        structured_spectrogram, W_fixed, n_free=3, n_iter=40, random_state=0
+    )
+    np.testing.assert_array_equal(result.W_fixed, original)
+    np.testing.assert_array_equal(W_fixed, original)
+
+
+def test_semi_supervised_shapes_and_parts(structured_spectrogram):
+    from spnmf.core import semi_supervised_nmf
+
+    F, T = structured_spectrogram.shape
+    W_fixed = np.abs(np.random.default_rng(2).random((F, 5))) + 0.1
+    result = semi_supervised_nmf(
+        structured_spectrogram, W_fixed, n_free=4, n_iter=25, random_state=0
+    )
+    assert result.W_free.shape == (F, 4)
+    assert result.H_free.shape == (4, T)
+    assert result.H_fixed.shape == (5, T)
+    assert result.free.shape == (F, T)
+    np.testing.assert_allclose(result.reconstruction, result.free + result.fixed)
+    assert np.all(result.free >= 0) and np.all(result.fixed >= 0)
+
+
+@pytest.mark.parametrize(
+    "W_fixed,message",
+    [
+        (np.ones((3, 2)), "W_fixed must be"),
+        (-np.ones((48, 2)), "non-negative"),
+    ],
+)
+def test_semi_supervised_rejects_bad_dictionary(structured_spectrogram, W_fixed, message):
+    from spnmf.core import semi_supervised_nmf
+
+    with pytest.raises(ValueError, match=message):
+        semi_supervised_nmf(structured_spectrogram, W_fixed, n_free=2)
+
+
+def test_semi_supervised_rejects_bad_rank(structured_spectrogram):
+    from spnmf.core import semi_supervised_nmf
+
+    W_fixed = np.ones((structured_spectrogram.shape[0], 3))
+    with pytest.raises(ValueError, match="n_free"):
+        semi_supervised_nmf(structured_spectrogram, W_fixed, n_free=0)

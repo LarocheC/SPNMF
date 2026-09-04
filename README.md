@@ -129,6 +129,38 @@ Two things the table shows, both of which match the paper:
 - **IS is fragile here.** It is the most sensitive to initialisation and the
   scale of `V`; try `power=2.0` (a power spectrogram) if you want to use it.
 
+### The projective term does not earn its place
+
+`python examples/ablate_projective.py`
+
+The first bullet above understates the problem. Swap the projective term for a
+plain free basis — same fixed dictionary, same rank, same iteration budget, same
+Wiener reconstruction — and the projection turns out to be not merely
+unnecessary but harmful:
+
+| | synthetic SDR h / p | real music SDR h / p |
+|---|---|---|
+| SPNMF (projective + fixed dictionary) | 25.59 / 12.99 | 5.11 / −4.55 |
+| **semi-supervised NMF (free basis, same dict)** | **26.58 / 13.00** | **11.16 / 3.64** |
+| dictionary only + residual | 24.45 / 11.65 | 7.57 / −0.63 |
+| median HPSS | 20.07 / 6.44 | 6.95 / −3.33 |
+
+On real music (MusicDelta stems, dictionary trained on held-out drums) dropping
+the projection gains **6 dB harmonic and 8 dB percussive**. The semi-supervised
+result the method is known for belongs to the dictionary, not to `W_h W_h^T V`.
+
+The mechanism is visible directly: a rank-`r` non-negative self-projection is
+greedy and content-blind. It absorbs ~99% of the energy of white noise just as
+readily as of a pure tone, and 97% of clean speech against a median split's 75%.
+The paper motivates it with PNMF's near-orthogonal bases, but measured on a real
+spectrogram at rank 24, `‖W_hᵀW_h − I‖_F/√r = 0.953` with 93% of the Gram matrix
+mass off-diagonal — the basis is not near-orthogonal, so the property the
+structure was chosen for does not hold.
+
+So use `semi_supervised_nmf` for real work. `spnmf` is kept because it is the
+published method and now a correct, tested implementation of it — which is what
+makes the comparison above possible.
+
 ### It is not a speech denoiser
 
 Worth stating plainly, because the name invites the assumption. SPNMF separates
@@ -265,6 +297,7 @@ here.
 | `separate(x, sr, ...)` | end-to-end separation → `Separation(harmonic, percussive, ...)` |
 | `spnmf(V, ...)` | the factorisation itself → `SPNMFResult(W_h, W_p, H_p, cost)` |
 | `nmf(V, ...)` | plain β-NMF |
+| `semi_supervised_nmf(V, W_fixed, ...)` | fixed dictionary + free basis — **beats `spnmf`** |
 | `learn_dictionary(signals, ...)` | train `W_p` by NMF over percussive audio |
 | `stft_dictionary(signals, ...)` | build `W_p` from raw STFT frames instead |
 | `median_hpss(x, sr, ...)` | median-filter HPSS baseline (Fitzgerald, 2010) |
@@ -295,10 +328,11 @@ src/spnmf/
   signals.py      synthetic harmonic/percussive signals
   io.py           audio I/O (soundfile, else stdlib wave)
   demo.py, cli.py
-tests/            102 tests, including numerical-gradient checks
+tests/            110 tests, including numerical-gradient checks
 examples/
   stratify_noise_corpus.py     sort an unlabelled noise bank
   quantisation_diagnostics.py  per-part damage under quantisation
+  ablate_projective.py         is the projective term worth anything?
   separate_file.py, reproduce_paper_figure.py
 ```
 

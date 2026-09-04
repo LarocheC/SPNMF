@@ -17,7 +17,14 @@ True
 """
 
 from .baselines import median_hpss
-from .core import NMFResult, SPNMFResult, nmf, spnmf
+from .core import (
+    NMFResult,
+    SemiSupervisedResult,
+    SPNMFResult,
+    nmf,
+    semi_supervised_nmf,
+    spnmf,
+)
 from .diagnostics import (
     Character,
     PartSNR,
@@ -36,6 +43,8 @@ from .stft import istft, stft, wiener_mask
 __version__ = "0.2.0"
 
 __all__ = [
+    "SemiSupervisedResult",
+    "semi_supervised_nmf",
     "tonal_fraction",
     "temporal_flatness",
     "per_part_snr",
