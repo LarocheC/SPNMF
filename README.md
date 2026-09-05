@@ -405,6 +405,9 @@ src/spnmf/
   signals.py      synthetic harmonic/percussive signals
   io.py           audio I/O (soundfile, else stdlib wave)
   demo.py, cli.py
+experiments/
+  quantisation_perception/     what int8 does to a deployed enhancer, and
+                               whether artefacts have perceptual fingerprints
 tests/            110 tests, including numerical-gradient checks
 examples/
   stratify_noise_corpus.py     sort an unlabelled noise bank
