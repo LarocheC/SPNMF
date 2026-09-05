@@ -408,6 +408,8 @@ src/spnmf/
 experiments/
   quantisation_perception/     what int8 does to a deployed enhancer, and
                                whether artefacts have perceptual fingerprints
+  streaming_skip/              what frame-skipping costs a stateful enhancer
+                               (mostly state coherence, not mask accuracy)
 tests/            110 tests, including numerical-gradient checks
 examples/
   stratify_noise_corpus.py     sort an unlabelled noise bank
