@@ -321,6 +321,52 @@ PESQ (93% of clips worse) at +0.04 dB SNR. Picking the pooled metric changes the
 sign of the answer, which is a larger effect than any content split measured
 here.
 
+### The follow-up: a noise codebook does not beat classical tracking either
+
+`python examples/noise_codebook_probe.py --data <VoiceBank-DEMAND-16k>`
+
+If a structured low-rank non-negative model is not useful for splitting a
+mixture, the remaining hope is to put it on the **nuisance**: a codebook of
+noise spectra, fitted per frame, estimating the noise floor where speech hides
+it — classical codebook-based enhancement (Srinivasan, Samuelsson & Kleijn,
+TASLP 2007). The mechanism it needs is real: during speech only some bands show
+the noise, so a codebook could read the visible bands and extrapolate **across
+frequency**. A recursive average can only extrapolate **across time**.
+
+Measured on VoiceBank-DEMAND, whose train and test splits use disjoint noise
+types. Target is the true noise band power (recovered exactly as
+`noisy − clean`), lightly smoothed. Lower is better; the codebook is given an
+*oracle* mask of which bands are noise-dominated, which the two baselines do
+not get:
+
+| arm | LSD (dB) |
+|---|---|
+| floor (irreducible fluctuation) | 2.12 |
+| codebook K=8 **ceiling** (true noise, all bands visible) | 2.35 |
+| **gated EMA, 0.16 s** | **3.71** |
+| Gerkmann–Hendriks MMSE tracker | 4.82 |
+| codebook K=1 | 4.98 |
+| codebook K=8, 2 fit steps | 5.39 |
+| codebook K=8, converged | 9.46 |
+
+Three things, and together they close the direction:
+
+1. **The dictionary is not the problem.** With every band visible it hits 2.35 dB
+   against a 2.12 dB floor — it represents unseen noise types almost perfectly.
+2. **The inference is.** Only 10.7 of 32 bands are visible during speech, so
+   fitting even a handful of coefficients is ill-posed. *Converging the fit makes
+   it monotonically worse* (K=8: 5.39 → 9.46), because a better fit to the
+   visible bands extrapolates worse to the hidden ones. Every codebook size loses
+   to the tracker, **including a single atom**.
+3. **Plain temporal persistence wins.** A per-band EMA that just holds its last
+   value beats the codebook by 1.7 dB and the tracker by 1.1 dB.
+
+Which is the same failure as the projective term, one level up: a low-rank
+structure that couples across a dimension, imposed where an unstructured
+per-dimension estimate does better. Cross-frequency extrapolation through a
+rank-K bottleneck is worse than remembering what each band was doing a moment
+ago.
+
 ## API
 
 | | |
@@ -364,6 +410,7 @@ examples/
   stratify_noise_corpus.py     sort an unlabelled noise bank
   quantisation_diagnostics.py  per-part damage under quantisation
   ablate_projective.py         is the projective term worth anything?
+  noise_codebook_probe.py      does a noise codebook beat classical tracking?
   separate_file.py, reproduce_paper_figure.py
 ```
 
